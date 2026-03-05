@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+/.swc/
 
 # production
 /build
@@ -39,3 +40,21 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# project-specific files (not needed for deployment)
+/data
+/logs
+/scripts
+AI_PRODUCT_SEARCH_PLAN.md
+PRE_MIGRATION_CHECKLIST.md
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# temporary files
+/tmp
+/temp
+.cache/

@@ -6,21 +6,52 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit",
+    "test": "npm run test:all",
+    "test:unit": "jest --testPathIgnorePatterns=tests/integration",
+    "test:integration": "jest --config jest.integration.config.js",
+    "test:all": "npm run test:unit && npm run test:integration",
+    "test:watch": "jest --watch",
+    "test:coverage": "npm run test:coverage:unit && npm run test:coverage:integration",
+    "test:coverage:unit": "jest --coverage --testPathIgnorePatterns=tests/integration",
+    "test:coverage:integration": "jest --config jest.integration.config.js --coverage",
+    "generate": "tsx scripts/generate-products.ts",
+    "fetch-images": "tsx scripts/fetch-unsplash-images.ts",
+    "seed": "tsx scripts/seed-products.ts"
   },
   "dependencies": {
+    "@pinecone-database/pinecone": "^7.1.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@vercel/kv": "^3.0.0",
+    "clsx": "^2.1.1",
+    "dotenv": "^17.3.1",
     "next": "16.1.6",
+    "openai": "^6.25.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.5.0",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "broadcastchannel-polyfill": "^1.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
+    "msw": "^2.12.10",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "web-streams-polyfill": "^4.2.0",
+    "whatwg-fetch": "^3.6.20"
   }
 }
