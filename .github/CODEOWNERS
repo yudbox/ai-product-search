@@ -1,0 +1,21 @@
+# CODEOWNERS file
+# Each line is a file pattern followed by one or more owners.
+# Owners will be automatically requested for review when someone opens a PR.
+
+# Global owner for all files in the repository
+* @yudbox
+
+# Specific owners for critical directories
+/.github/ @yudbox
+/app/api/ @yudbox
+/lib/ @yudbox
+
+# Tests must be reviewed
+**/__tests__/ @yudbox
+/tests/ @yudbox
+
+# Configuration files
+package.json @yudbox
+tsconfig.json @yudbox
+jest.config.js @yudbox
+.github/workflows/ @yudbox

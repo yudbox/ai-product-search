@@ -12,7 +12,13 @@ jest.mock("next/navigation", () => ({
 
 // Mock next/link
 jest.mock("next/link", () => {
-  return ({ children, href }: { children: React.ReactNode; href: string }) => {
+  const MockLink = ({
+    children,
+    href,
+  }: {
+    children: React.ReactNode;
+    href: string;
+  }) => {
     return (
       <a
         href={href}
@@ -25,6 +31,8 @@ jest.mock("next/link", () => {
       </a>
     );
   };
+  MockLink.displayName = "MockLink";
+  return MockLink;
 });
 
 // Mock SearchBar component
@@ -104,7 +112,7 @@ describe("Home Page", () => {
   it("renders all three feature cards", () => {
     render(<Home />);
     expect(screen.getByText("Semantic Search")).toBeInTheDocument();
-    expect(screen.getByText("50+ Products")).toBeInTheDocument();
+    expect(screen.getByText("200+ Products")).toBeInTheDocument();
     expect(screen.getByText("Smart Filters")).toBeInTheDocument();
   });
 

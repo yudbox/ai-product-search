@@ -8,7 +8,7 @@ const features = [
   },
   {
     icon: "👟",
-    title: "50+ Products",
+    title: "200+ Products",
     description: "Curated collection of athletic shoes from top brands.",
   },
   {

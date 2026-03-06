@@ -1,0 +1,11 @@
+#!/bin/sh
+# Husky pre-push hook
+# Runs unit and integration tests without coverage
+
+echo "🧪 Running unit tests..."
+npm run test:unit -- --passWithNoTests || exit 1
+
+echo "🧪 Running integration tests..."
+npm run test:integration -- --passWithNoTests || exit 1
+
+echo "✅ All tests passed!"

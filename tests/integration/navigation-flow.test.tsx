@@ -16,7 +16,13 @@ jest.mock("next/navigation", () => ({
 
 // Mock next/link
 jest.mock("next/link", () => {
-  return ({ children, href }: { children: React.ReactNode; href: string }) => {
+  const MockLink = ({
+    children,
+    href,
+  }: {
+    children: React.ReactNode;
+    href: string;
+  }) => {
     return (
       <a
         href={href}
@@ -29,6 +35,8 @@ jest.mock("next/link", () => {
       </a>
     );
   };
+  MockLink.displayName = "MockLink";
+  return MockLink;
 });
 
 describe("Integration: Navigation Flow", () => {
@@ -91,7 +99,7 @@ describe("Integration: Navigation Flow", () => {
     render(<SearchPage />);
 
     expect(
-      screen.getByText(`Search Results for "${testQuery}"`),
+      screen.getByText(`Search Results for '${testQuery}'`),
     ).toBeInTheDocument();
   });
 });

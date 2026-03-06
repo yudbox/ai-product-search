@@ -48,9 +48,38 @@ export interface SearchResponse {
   products: Product[];
   explanation?: string;
   cached?: boolean;
+  rejected?: boolean;
+  rejectionReason?: string;
+  suggestedQuery?: string;
   performance?: {
     embedding: string;
     search: string;
     total: string;
+    parsing?: string;
   };
+}
+
+// Parsed query structure from LLM
+export interface ParsedQuery {
+  // Semantic query for embedding (cleaned from filters)
+  semanticQuery: string;
+
+  // Extracted filters
+  gender?: Gender;
+  color?: string;
+  brand?: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+
+  // Validation fields (TIER 1)
+  isRelevant?: boolean;
+  rejectionReason?: string;
+  suggestedQuery?: string;
+  confidence?: number;
+
+  // Original query and metadata
+  originalQuery: string;
+  detectedLanguage?: string;
+  specialTerms?: string[]; // e.g., "пятихатка", "герла"
 }

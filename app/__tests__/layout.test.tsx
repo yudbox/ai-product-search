@@ -5,7 +5,7 @@ import RootLayout, { metadata } from "../layout";
 // Suppress console warnings for layout tests
 const originalError = console.error;
 beforeAll(() => {
-  console.error = (...args: any[]) => {
+  console.error = (...args: Parameters<typeof console.error>) => {
     if (
       typeof args[0] === "string" &&
       args[0].includes("cannot be a child of")

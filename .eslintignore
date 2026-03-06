@@ -1,0 +1,21 @@
+# ESLint ignore patterns
+
+# Coverage reports (auto-generated)
+
+coverage/
+\*.lcov
+
+# Build outputs
+
+.next/
+out/
+dist/
+
+# Dependencies
+
+node_modules/
+
+# Environment files
+
+.env.local
+.env.\*.local

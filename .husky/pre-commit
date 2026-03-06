@@ -1,0 +1,12 @@
+#!/bin/sh
+# Husky pre-commit hook
+# Runs linting and type checking on the entire project
+
+echo "🔍 Running ESLint..."
+npm run lint || exit 1
+
+echo "🔍 Running TypeScript type check..."
+npm run type-check || exit 1
+
+echo "✅ Pre-commit checks passed!"
+
