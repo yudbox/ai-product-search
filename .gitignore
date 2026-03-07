@@ -45,8 +45,6 @@ next-env.d.ts
 /data
 /logs
 /scripts
-AI_PRODUCT_SEARCH_PLAN.md
-PRE_MIGRATION_CHECKLIST.md
 
 # IDE settings
 .vscode/
@@ -58,3 +56,7 @@ PRE_MIGRATION_CHECKLIST.md
 /tmp
 /temp
 .cache/
+
+# Documentation files (except README)
+*.md
+!README.md
