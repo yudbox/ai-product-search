@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { NextRequest, NextResponse } from "next/server";
 
 /**
  * Vercel Webhook Proxy
@@ -14,17 +14,9 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
  * 5. GitHub Actions runs deployment.yml workflow
  * 6. Workflow sends email notification
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function POST(request: NextRequest) {
   console.log("=== WEBHOOK PROXY START ===");
-  console.log("Request method:", req.method);
-  console.log("Request headers:", JSON.stringify(req.headers, null, 2));
-
-  // Security: only POST requests allowed
-  if (req.method !== "POST") {
-    console.error("❌ STEP 1 FAILED: Invalid method", req.method);
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-  console.log("✅ STEP 1 PASSED: Method is POST");
+  console.log("Request method:", request.method);
 
   // Environment variables check
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -38,13 +30,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Check if token is set
   if (!GITHUB_TOKEN) {
     console.error("❌ STEP 2 FAILED: GITHUB_TOKEN not set in environment");
-    return res.status(500).json({ error: "Server configuration error" });
+    return NextResponse.json(
+      { error: "Server configuration error" },
+      { status: 500 },
+    );
   }
   console.log("✅ STEP 2 PASSED: GITHUB_TOKEN is configured");
 
   try {
     // Get payload from Vercel webhook
-    const payload = req.body;
+    const payload = await request.json();
 
     console.log("\n--- STEP 3: Parse Vercel webhook payload ---");
     console.log("Full payload:", JSON.stringify(payload, null, 2));
@@ -133,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (response.status === 204 || response.ok) {
       console.log("✅ STEP 6 PASSED: GitHub API accepted the request");
       console.log("=== WEBHOOK PROXY SUCCESS ===\n");
-      return res.status(200).json({
+      return NextResponse.json({
         success: true,
         message: "GitHub Actions workflow triggered",
       });
@@ -147,11 +142,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error("Error body:", errorText);
     console.error("=== WEBHOOK PROXY FAILED ===\n");
 
-    return res.status(response.status).json({
-      error: "GitHub API error",
-      details: errorText,
-      status: response.status,
-    });
+    return NextResponse.json(
+      {
+        error: "GitHub API error",
+        details: errorText,
+        status: response.status,
+      },
+      { status: response.status },
+    );
   } catch (error) {
     // Log errors
     console.error("\n❌ EXCEPTION CAUGHT: Webhook processing error");
@@ -166,9 +164,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     console.error("=== WEBHOOK PROXY EXCEPTION ===\n");
 
-    return res.status(500).json({
-      error: "Internal server error",
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    );
   }
 }

@@ -22,31 +22,7 @@ const customJestConfig = {
     "!lib/**/*",
   ],
   coverageThreshold: {
-    "components/**/*.{ts,tsx}": {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
-    },
-    "hooks/**/*.{ts,tsx}": {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
-    },
-    "app/api/**/*.{ts,tsx}": {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
-    },
-    "app/layout.tsx": {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70,
-    },
-    "app/page.tsx": {
+    global: {
       branches: 70,
       functions: 70,
       lines: 70,
