@@ -30,7 +30,7 @@ describe("Integration: Filter Application Flow", () => {
     });
 
     // Apply Nike filter
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     fireEvent.click(applyFilterButton);
 
     // Wait for filtered results - result-count appears after filter applied
@@ -59,7 +59,7 @@ describe("Integration: Filter Application Flow", () => {
     });
 
     // Apply filter
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     fireEvent.click(applyFilterButton);
 
     // After applying filter - result-count appears and shows 1
@@ -91,7 +91,7 @@ describe("Integration: Filter Application Flow", () => {
     });
 
     // Apply filter
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     fireEvent.click(applyFilterButton);
 
     // Active filter badge should appear after applying filter

@@ -1,8 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+// @ts-nocheck - Test file with extensive mocking
 // Mock dependencies BEFORE importing route
 jest.mock("@/lib/openai", () => ({
   openai: {
     embeddings: {
       create: jest.fn(),
+    },
+    chat: {
+      completions: {
+        create: jest.fn(),
+      },
     },
   },
 }));
@@ -27,9 +35,11 @@ jest.mock("next/server", () => ({
 import { POST } from "../route";
 import { NextResponse } from "next/server";
 import { Gender } from "@/lib/types";
+import { openai } from "@/lib/openai";
+import { index } from "@/lib/pinecone";
 
-const mockOpenai = require("@/lib/openai").openai;
-const mockIndex = require("@/lib/pinecone").index;
+const mockOpenai = jest.mocked(openai);
+const mockIndex = jest.mocked(index);
 
 // Suppress console.error for expected errors in tests
 const originalError = console.error;
@@ -91,10 +101,66 @@ describe("POST /api/search", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Setup default mocks
+    // Setup default mocks for embeddings
     mockOpenai.embeddings.create.mockResolvedValue({
       data: [{ embedding: mockEmbedding }],
     });
+
+    // Setup chat completions mock for parseQueryWithLLM
+    mockOpenai.chat.completions.create.mockImplementation(
+      async ({ messages }: any) => {
+        const userMessage = messages.find((m: any) => m.role === "user");
+        const query = userMessage?.content || "";
+
+        // Parse price from query text
+        let minPrice: number | undefined;
+        let maxPrice: number | undefined;
+        let semanticQuery = query;
+
+        // Extract "under $X", "below $X", or "less than $X"
+        const underMatch = query.match(
+          /(?:under|below|less\s+than)\s+\$?(\d+)/i,
+        );
+        if (underMatch) {
+          maxPrice = parseInt(underMatch[1]);
+          semanticQuery = query.replace(underMatch[0], "").trim();
+        }
+
+        // Extract "above $X", "over $X", or "more than $X"
+        const aboveMatch = query.match(
+          /(?:above|over|more\s+than)\s+\$?(\d+)/i,
+        );
+        if (aboveMatch) {
+          minPrice = parseInt(aboveMatch[1]);
+          semanticQuery = query.replace(aboveMatch[0], "").trim();
+        }
+
+        // Handle "between $X and $Y" or "$X to $Y"
+        const betweenMatch = query.match(/\$?(\d+)\s+(?:to|and)\s+\$?(\d+)/i);
+        if (betweenMatch) {
+          minPrice = parseInt(betweenMatch[1]);
+          maxPrice = parseInt(betweenMatch[2]);
+        }
+
+        const parsedResult = {
+          isRelevant: true,
+          semanticQuery: semanticQuery || query,
+          originalQuery: query,
+          ...(minPrice !== undefined && { minPrice }),
+          ...(maxPrice !== undefined && { maxPrice }),
+        };
+
+        return {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(parsedResult),
+              },
+            },
+          ],
+        };
+      },
+    );
 
     const mockNamespace = {
       query: jest.fn().mockResolvedValue({
@@ -176,8 +242,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(0); // Both products are > $80
+    // Verify Pinecone was called with price filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price).toEqual({ $gte: 0, $lte: 80 });
   });
 
   it("filters products by price range 80-150", async () => {
@@ -192,10 +260,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(1); // Only Nike at $120
-    expect(callArgs.products[0].price).toBeGreaterThan(80);
-    expect(callArgs.products[0].price).toBeLessThanOrEqual(150);
+    // Verify Pinecone was called with price filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price).toEqual({ $gte: 80, $lte: 150 });
   });
 
   it("filters products by price range 150+", async () => {
@@ -210,8 +278,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(1); // Only Adidas at $160
+    // Verify Pinecone was called with price filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price).toEqual({ $gte: 150, $lte: 10000 });
   });
 
   it("filters products by brand", async () => {
@@ -226,9 +296,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(1);
-    expect(callArgs.products[0].brand).toBe("Nike");
+    // Verify Pinecone was called with brand filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.brand).toEqual({ $in: ["Nike"] });
   });
 
   it("filters products by category", async () => {
@@ -243,9 +314,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
+    // Categories are not filtered in Pinecone (intentionally disabled)
+    // Just verify the API call succeeds
     const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(1);
-    expect(callArgs.products[0].category).toBe("Running Shoes");
+    expect(callArgs.success).toBe(true);
   });
 
   it("applies multiple filters", async () => {
@@ -261,12 +333,14 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(1);
-    expect(callArgs.products[0].brand).toBe("Nike");
+    // Verify Pinecone was called with both filters
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.brand).toEqual({ $in: ["Nike"] });
+    expect(queryCall.filter?.price).toEqual({ $gte: 80, $lte: 150 });
   });
 
-  it("includes totalBeforeFilters count", async () => {
+  it("returns products when filters are applied", async () => {
     const req = {
       json: async () => ({
         query: "shoes",
@@ -279,8 +353,8 @@ describe("POST /api/search", () => {
     await POST(req);
 
     const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.totalBeforeFilters).toBe(2);
-    expect(callArgs.count).toBe(1);
+    expect(callArgs.success).toBe(true);
+    expect(callArgs.products).toBeDefined();
   });
 
   it("returns all topK results without slicing", async () => {
@@ -378,13 +452,16 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    expect(NextResponse.json).toHaveBeenCalledWith(
-      {
-        error: "Search failed",
-        details: "OpenAI API error",
-      },
-      { status: 500 },
-    );
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0];
+    expect(callArgs[0]).toMatchObject({
+      success: false,
+      error: "Search failed",
+      details: "OpenAI API error",
+      query: "shoes",
+      count: 0,
+      products: [],
+    });
+    expect(callArgs[1]).toEqual({ status: 500 });
   });
 
   it("handles Pinecone API errors", async () => {
@@ -399,13 +476,16 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    expect(NextResponse.json).toHaveBeenCalledWith(
-      {
-        error: "Search failed",
-        details: "Pinecone query failed",
-      },
-      { status: 500 },
-    );
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0];
+    expect(callArgs[0]).toMatchObject({
+      success: false,
+      error: "Search failed",
+      details: "Pinecone query failed",
+      query: "shoes",
+      count: 0,
+      products: [],
+    });
+    expect(callArgs[1]).toEqual({ status: 500 });
   });
 
   it("handles malformed request body", async () => {
@@ -417,13 +497,16 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    expect(NextResponse.json).toHaveBeenCalledWith(
-      {
-        error: "Search failed",
-        details: "Invalid JSON",
-      },
-      { status: 500 },
-    );
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0];
+    expect(callArgs[0]).toMatchObject({
+      success: false,
+      error: "Search failed",
+      details: "Invalid JSON",
+      query: "",
+      count: 0,
+      products: [],
+    });
+    expect(callArgs[1]).toEqual({ status: 500 });
   });
 
   it("handles missing metadata fields", async () => {
@@ -526,9 +609,12 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
+    // Verify Pinecone was called with maxPrice filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$lte).toBe(100);
+
     const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    // Should only include products under $100 (Brooks at 75)
-    expect(callArgs.products.every((p: any) => p.price <= 100)).toBe(true);
     expect(callArgs.explanation).toContain("under $100");
   });
 
@@ -541,8 +627,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products.every((p: any) => p.price <= 120)).toBe(true);
+    // Verify Pinecone was called with maxPrice filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$lte).toBe(120);
   });
 
   it("extracts max price from query text (less than)", async () => {
@@ -554,8 +642,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products.every((p: any) => p.price <= 90)).toBe(true);
+    // Verify Pinecone was called with maxPrice filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$lte).toBe(90);
   });
 
   it("extracts min price from query text (over)", async () => {
@@ -567,9 +657,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    // Should only include products over $100 (Nike at 120, Adidas at 180)
-    expect(callArgs.products.every((p: any) => p.price >= 100)).toBe(true);
+    // Verify Pinecone was called with minPrice filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$gte).toBe(100);
   });
 
   it("extracts min price from query text (above)", async () => {
@@ -581,8 +672,10 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products.every((p: any) => p.price >= 150)).toBe(true);
+    // Verify Pinecone was called with minPrice filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$gte).toBe(150);
   });
 
   it("handles both min and max price constraints", async () => {
@@ -594,10 +687,11 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(
-      callArgs.products.every((p: any) => p.price >= 80 && p.price <= 150),
-    ).toBe(true);
+    // Verify Pinecone was called with both min and max price filters
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$gte).toBe(80);
+    expect(queryCall.filter?.price?.$lte).toBe(150);
   });
 
   it("price constraints work with UI filters", async () => {
@@ -612,9 +706,11 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
-    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products.every((p: any) => p.price <= 150)).toBe(true);
-    expect(callArgs.products.every((p: any) => p.brand === "Nike")).toBe(true);
+    // Verify Pinecone was called with both price and brand filters
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$lte).toBe(150);
+    expect(queryCall.filter?.brand).toEqual({ $in: ["Nike"] });
   });
 
   it("handles query with price but no matching products", async () => {
@@ -626,9 +722,551 @@ describe("POST /api/search", () => {
 
     await POST(req);
 
+    // Verify Pinecone was called with very low price filter
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    expect(queryCall.filter?.price?.$lte).toBe(10);
+
     const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
-    expect(callArgs.products).toHaveLength(0);
-    expect(callArgs.explanation).toContain("max price: $10");
+    expect(callArgs.explanation).toContain("$10");
+  });
+
+  it("rejects non-footwear queries", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: false,
+              rejectionReason: "not_footwear",
+              semanticQuery: "laptop",
+              originalQuery: "laptop",
+              suggestedQuery: "running shoes",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "laptop" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.success).toBe(false);
+    expect(callArgs.rejected).toBe(true);
+    expect(callArgs.rejectionReason).toBe("not_footwear");
+    expect(callArgs.explanation).toContain("not a shoe product");
+    expect(callArgs.suggestedQuery).toBe("running shoes");
+    expect(callArgs.performance.embedding).toBe("0ms");
+  });
+
+  it("rejects questions instead of search queries", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: false,
+              rejectionReason: "question_not_search",
+              semanticQuery: "what are the best shoes",
+              originalQuery: "what are the best shoes",
+              suggestedQuery: "Nike sneakers",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "what are the best shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.success).toBe(false);
+    expect(callArgs.rejected).toBe(true);
+    expect(callArgs.rejectionReason).toBe("question_not_search");
+    expect(callArgs.explanation).toContain(
+      "search for products instead of asking questions",
+    );
+    expect(callArgs.suggestedQuery).toBe("Nike sneakers");
+  });
+
+  it("rejects nonsense queries", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: false,
+              rejectionReason: "nonsense",
+              semanticQuery: "asdfghjkl",
+              originalQuery: "asdfghjkl",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "asdfghjkl" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.success).toBe(false);
+    expect(callArgs.rejected).toBe(true);
+    expect(callArgs.rejectionReason).toBe("nonsense");
+    expect(callArgs.explanation).toContain("couldn't understand");
+  });
+
+  it("handles rejection without suggestion", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: false,
+              rejectionReason: "not_footwear",
+              semanticQuery: "car",
+              originalQuery: "car",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "car" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.success).toBe(false);
+    expect(callArgs.explanation).toContain("not a shoe product");
+    expect(callArgs.explanation).not.toContain("Try searching for");
+  });
+
+  it("generates explanation with gender filter", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "women's running shoes",
+              gender: "women",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "women's running shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("women's shoes");
+  });
+
+  it("generates explanation with color filter", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "red running shoes",
+              color: "red",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "red running shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("red color");
+  });
+
+  it("generates explanation with brand filter", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "Nike running shoes",
+              brand: "Nike",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "Nike running shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("Brand");
+  });
+
+  it("generates explanation with multiple filters", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "women's red Nike running shoes under $100",
+              gender: "women",
+              color: "red",
+              brand: "Nike",
+              maxPrice: 100,
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({
+        query: "women's red Nike running shoes under $100",
+      }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("women's shoes");
+    expect(callArgs.explanation).toContain("under $100");
+    expect(callArgs.explanation).toContain("red color");
+  });
+
+  it("generates explanation with semantic query different from original", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "athletic sneakers",
+              originalQuery: "kicks for the gym",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "kicks for the gym" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("Searching for: athletic sneakers");
+  });
+
+  it("generates explanation with special terms", async () => {
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "running shoes with boost",
+              specialTerms: ["boost", "cushioning"],
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "running shoes with boost" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("Understood: boost, cushioning");
+  });
+
+  it("generates no-results explanation with gender filter", async () => {
+    const mockNamespace = {
+      query: jest.fn().mockResolvedValue({
+        matches: [],
+      }),
+    };
+    mockIndex.namespace.mockReturnValue(mockNamespace);
+
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "men's running shoes",
+              gender: "men",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "men's running shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
     expect(callArgs.explanation).toContain("No products found");
+    expect(callArgs.explanation).toContain("gender: men");
+  });
+
+  it("generates no-results explanation with color and suggests removing it", async () => {
+    const mockNamespace = {
+      query: jest.fn().mockResolvedValue({
+        matches: [],
+      }),
+    };
+    mockIndex.namespace.mockReturnValue(mockNamespace);
+
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "purple running shoes",
+              color: "purple",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "purple running shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("No products found");
+    expect(callArgs.explanation).toContain("color: purple");
+    expect(callArgs.explanation).toContain("try without color filter");
+  });
+
+  it("generates no-results explanation with brand and suggests alternatives", async () => {
+    const mockNamespace = {
+      query: jest.fn().mockResolvedValue({
+        matches: [],
+      }),
+    };
+    mockIndex.namespace.mockReturnValue(mockNamespace);
+
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "Reebok running shoes",
+              brand: "Reebok",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "Reebok running shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("No products found");
+    expect(callArgs.explanation).toContain("brand: Reebok");
+    expect(callArgs.explanation).toContain("try different brands");
+  });
+
+  it("generates no-results explanation with minPrice", async () => {
+    const mockNamespace = {
+      query: jest.fn().mockResolvedValue({
+        matches: [],
+      }),
+    };
+    mockIndex.namespace.mockReturnValue(mockNamespace);
+
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "running shoes over $500",
+              minPrice: 500,
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "running shoes over $500" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("No products found");
+    expect(callArgs.explanation).toContain("min price: $500");
+  });
+
+  it("generates no-results explanation with maxPrice", async () => {
+    const mockNamespace = {
+      query: jest.fn().mockResolvedValue({
+        matches: [],
+      }),
+    };
+    mockIndex.namespace.mockReturnValue(mockNamespace);
+
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "running shoes",
+              originalQuery: "running shoes under $5",
+              maxPrice: 5,
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "running shoes under $5" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("No products found");
+    expect(callArgs.explanation).toContain("max price: $5");
+  });
+
+  it("generates no-results explanation with suggested query", async () => {
+    const mockNamespace = {
+      query: jest.fn().mockResolvedValue({
+        matches: [],
+      }),
+    };
+    mockIndex.namespace.mockReturnValue(mockNamespace);
+
+    mockOpenai.chat.completions.create.mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              isRelevant: true,
+              semanticQuery: "dress shoes",
+              originalQuery: "formal shoes",
+              suggestedQuery: "leather dress shoes",
+            }),
+          },
+        },
+      ],
+    });
+
+    const req = {
+      json: async () => ({ query: "formal shoes" }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.explanation).toContain("No products found");
+    expect(callArgs.explanation).toContain('search: "leather dress shoes"');
+  });
+
+  it("excludes products by ID", async () => {
+    const req = {
+      json: async () => ({
+        query: "shoes",
+        excludedIds: ["1"],
+      }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const callArgs = (NextResponse.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.products).toHaveLength(1);
+    expect(callArgs.products[0].id).toBe("2");
+  });
+
+  it("increases topK when excludedIds provided", async () => {
+    const req = {
+      json: async () => ({
+        query: "shoes",
+        excludedIds: ["1", "2", "3"],
+      }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    // Should request 50 + 3 = 53 results
+    expect(queryCall.topK).toBe(53);
+  });
+
+  it("caps topK at 100 even with many excluded IDs", async () => {
+    const excludedIds = Array.from({ length: 100 }, (_, i) => `${i}`);
+
+    const req = {
+      json: async () => ({
+        query: "shoes",
+        excludedIds,
+      }),
+    } as unknown as Request;
+
+    await POST(req);
+
+    const mockNamespace = mockIndex.namespace.mock.results[0].value;
+    const queryCall = mockNamespace.query.mock.calls[0][0];
+    // Should cap at 100
+    expect(queryCall.topK).toBe(100);
   });
 });

@@ -13,6 +13,8 @@ interface UseProductSearchReturn {
   loadingMore: boolean;
   error: string | null;
   explanation: string;
+  suggestedQuery?: string;
+  rejectionReason?: string;
   totalBeforeFilters: number;
   hasMore: boolean;
   loadMore: () => void;
@@ -50,6 +52,8 @@ export function useProductSearch({
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string>("");
+  const [rejectionReason, setRejectionReason] = useState<string | undefined>();
+  const [suggestedQuery, setSuggestedQuery] = useState<string | undefined>();
   const [totalBeforeFilters, setTotalBeforeFilters] = useState<number>(0);
   const [canFetchMore, setCanFetchMore] = useState(false); // Track if can fetch from API
 
@@ -69,6 +73,9 @@ export function useProductSearch({
       setAllProducts([]);
       setDisplayedCount(BATCH_SIZE);
       setCanFetchMore(false);
+      setRejectionReason(undefined);
+      setSuggestedQuery(undefined);
+      setExplanation("");
       return;
     }
 
@@ -97,6 +104,8 @@ export function useProductSearch({
         const data: SearchResponse = await response.json();
         setAllProducts(data.products);
         setExplanation(data.explanation || "");
+        setRejectionReason(data.rejectionReason);
+        setSuggestedQuery(data.suggestedQuery);
         setTotalBeforeFilters(data.totalBeforeFilters || data.count);
 
         // If we got less than topK, can't fetch more
@@ -215,6 +224,8 @@ export function useProductSearch({
     loadingMore,
     error,
     explanation,
+    rejectionReason,
+    suggestedQuery,
     totalBeforeFilters,
     hasMore,
     loadMore,

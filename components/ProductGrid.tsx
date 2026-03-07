@@ -15,7 +15,7 @@ export function ProductGrid({ products, loading = false }: ProductGridProps) {
       <div
         data-testid="product-grid"
         data-loading="true"
-        className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
       >
         {[...Array(12)].map((_, i) => (
           <ProductCardSkeleton key={i} />
@@ -51,7 +51,7 @@ export function ProductGrid({ products, loading = false }: ProductGridProps) {
     <div
       data-testid="product-grid"
       data-loading="false"
-      className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
     >
       {products.map((product) => (
         <ProductCard key={product.id} product={product} />

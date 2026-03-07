@@ -30,7 +30,7 @@ describe("Integration: Multiple Filters Flow", () => {
     });
 
     // Apply first filter (brand)
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     fireEvent.click(applyFilterButton);
 
     // Results should be filtered - result-count appears after filter applied
@@ -56,7 +56,7 @@ describe("Integration: Multiple Filters Flow", () => {
     });
 
     // Apply filter
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     fireEvent.click(applyFilterButton);
 
     // Wait for filter to be applied
@@ -65,7 +65,7 @@ describe("Integration: Multiple Filters Flow", () => {
     });
 
     // Clear all filters
-    const clearAllButton = screen.getByTestId("clear-all");
+    const clearAllButton = screen.getAllByTestId("clear-all")[0];
     fireEvent.click(clearAllButton);
 
     // All results should return - check by products visible again
@@ -87,7 +87,7 @@ describe("Integration: Multiple Filters Flow", () => {
     });
 
     // Apply filter
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     fireEvent.click(applyFilterButton);
 
     // After filtering, result count should show filtered count

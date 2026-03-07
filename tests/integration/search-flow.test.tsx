@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import SearchPage from "@/app/search/page";
 
 // Mock next/navigation
@@ -28,7 +27,7 @@ describe("Integration: Search Flow", () => {
 
     // Assert: Search header is displayed
     expect(
-      screen.getByText('Search Results for "running shoes"'),
+      screen.getByText("Search Results for 'running shoes'"),
     ).toBeInTheDocument();
 
     // Assert: Loading state is shown initially
@@ -65,7 +64,7 @@ describe("Integration: Search Flow", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText('Search Results for "shoes & sneakers"'),
+        screen.getByText("Search Results for 'shoes & sneakers'"),
       ).toBeInTheDocument();
     });
   });

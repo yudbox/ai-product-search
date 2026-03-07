@@ -41,7 +41,7 @@ describe("Integration: Empty Results Flow", () => {
     render(<SearchPage />);
 
     expect(
-      screen.getByText('Search Results for "nonexistent product"'),
+      screen.getByText("Search Results for 'nonexistent product'"),
     ).toBeInTheDocument();
   });
 

@@ -3,14 +3,21 @@ import {
   mockNikeShoe,
   mockAdidasShoe,
   mockPumaShoe,
-  allMockProducts,
 } from "../data/products.mock";
 import { SearchResponse } from "@/lib/types";
 
 export const searchHandlers = [
   // Successful search - returns Nike and Adidas shoes
   http.post("http://localhost/api/search", async ({ request }) => {
-    const body = (await request.json()) as any;
+    const body = (await request.json()) as {
+      query: string;
+      filters?: {
+        brands?: string[];
+        priceRange?: string[];
+        categories?: string[];
+      };
+      excludedIds?: string[];
+    };
     const { query, filters } = body;
 
     // Empty query validation

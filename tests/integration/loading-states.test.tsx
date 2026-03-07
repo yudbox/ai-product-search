@@ -70,7 +70,7 @@ describe("Integration: Loading States Flow", () => {
     });
 
     // Apply filter - this triggers new fetch
-    const applyFilterButton = screen.getByTestId("apply-filter");
+    const applyFilterButton = screen.getAllByTestId("apply-filter")[0];
     applyFilterButton.click();
 
     // Should show loading again (briefly)

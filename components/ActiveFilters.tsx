@@ -17,7 +17,6 @@ export function ActiveFilters({
   onRemoveFilter,
   onClearAll,
   resultCount,
-  totalCount,
   searchQuery = "",
 }: ActiveFiltersProps) {
   const {
@@ -41,9 +40,9 @@ export function ActiveFilters({
             <span className="text-amber-600 text-lg">💡</span>
             <div className="flex-1">
               <p className="text-sm font-medium text-amber-900">
-                You searched for "
-                <span className="font-bold">{brandInQuery}</span>" but filtered
-                by{" "}
+                You searched for &ldquo;
+                <span className="font-bold">{brandInQuery}</span>&rdquo; but
+                filtered by{" "}
                 <span className="font-bold">{filters.brands?.join(", ")}</span>
               </p>
               <p className="text-xs text-amber-700 mt-1">
