@@ -19,7 +19,7 @@ jobs:
         run: |
           echo "=== WORKFLOW START: Vercel Deployment Notification ==="
           echo "Triggered by: ${{ github.event_name }}"
-          echo "Event type: ${{ github.event.action }}"
+
 
           # Get data from webhook payload
           DEPLOYMENT_URL="${{ github.event.client_payload.deployment_url }}"
@@ -28,13 +28,7 @@ jobs:
           COMMIT_MSG="${{ github.event.client_payload.commit_message }}"
           PROJECT="${{ github.event.client_payload.project_name }}"
 
-          echo ""
-          echo "--- Received Payload Data ---"
-          echo "Deployment URL: $DEPLOYMENT_URL"
-          echo "Production URL: $PRODUCTION_URL"
-          echo "Commit SHA: $COMMIT_SHA"
-          echo "Commit Message: $COMMIT_MSG"
-          echo "Project: $PROJECT"
+
 
           # Create markdown summary for GitHub Actions
           echo "# 🚀 Vercel Deployment Successful!" >> $GITHUB_STEP_SUMMARY
@@ -50,93 +44,40 @@ jobs:
           echo "- **Triggered by:** Vercel Webhook" >> $GITHUB_STEP_SUMMARY
 
           echo ""
-          echo "✅ STEP 1 PASSED: Summary created successfully"
+          echo "✅ Deployment notification workflow completed"
 
-      # Step 2: Send Email Notification
-      # Sends detailed email to a.yudbox@gmail.com
-      - name: 📧 Send Email Notification
-        uses: dawidd6/action-send-mail@v3
-        with:
-          # Gmail SMTP configuration
-          server_address: smtp.gmail.com
-          server_port: 587
-          username: a.yudbox@gmail.com
-          password: ${{ secrets.EMAIL_PASSWORD }} # Gmail App Password
-
-          # Sender and recipient
-          from: GitHub Actions <a.yudbox@gmail.com>
-          to: a.yudbox@gmail.com
-
-          # Email subject
-          subject: "✅ Vercel Deployment Ready - ${{ github.event.client_payload.project_name }}"
-
-          # HTML email body
-          html_body: |
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #0070f3;">🚀 Vercel Deployment Successful!</h2>
-              
-              <p>Your deployment has been completed successfully.</p>
-              
-              <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <h3 style="margin-top: 0; color: #333;">🔗 Deployment Links</h3>
-                <p style="margin: 5px 0;">
-                  <strong>Production URL:</strong><br>
-                  <a href="${{ github.event.client_payload.production_url || github.event.client_payload.deployment_url }}" 
-                     style="color: #0070f3; text-decoration: none;">
-                    ${{ github.event.client_payload.production_url || github.event.client_payload.deployment_url }}
-                  </a>
-                </p>
-                <p style="margin: 5px 0;">
-                  <strong>Deployment URL:</strong><br>
-                  <a href="${{ github.event.client_payload.deployment_url }}" 
-                     style="color: #0070f3; text-decoration: none;">
-                    ${{ github.event.client_payload.deployment_url }}
-                  </a>
-                </p>
-              </div>
-              
-              <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                <h3 style="margin-top: 0; color: #333;">📦 Deployment Details</h3>
-                <table style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                    <td style="padding: 5px 0;"><strong>Project:</strong></td>
-                    <td style="padding: 5px 0;">${{ github.event.client_payload.project_name }}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 5px 0;"><strong>Commit:</strong></td>
-                    <td style="padding: 5px 0;"><code>${{ github.event.client_payload.commit_sha }}</code></td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 5px 0;"><strong>Message:</strong></td>
-                    <td style="padding: 5px 0;">${{ github.event.client_payload.commit_message }}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 5px 0;"><strong>Branch:</strong></td>
-                    <td style="padding: 5px 0;">${{ github.event.client_payload.branch || 'main' }}</td>
-                  </tr>
-                </table>
-              </div>
-              
-              <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
-              
-              <p style="color: #666; font-size: 12px; text-align: center;">
-                Deployed by <a href="https://vercel.com" style="color: #0070f3;">Vercel</a> • 
-                Repository: <a href="https://github.com/${{ github.repository }}" style="color: #0070f3;">${{ github.repository }}</a>
-              </p>
-            </div>
-
-          # TLS security
-          secure: true
+      # ============================================================
+      # Step 2: [PLACEHOLDER] Send Notification
+      # ============================================================
+      # You can add email or bot notification here:
+      #
+      # Option 1: Email via SMTP
+      # - Use action: dawidd6/action-send-mail@v3
+      # - Configure SMTP server (Gmail, SendGrid, etc.)
+      # - Add EMAIL_PASSWORD to GitHub Secrets
+      #
+      # Option 2: Telegram Bot (Recommended)
+      # - Create bot via @BotFather
+      # - Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to GitHub Secrets
+      # - Use: curl -X POST https://api.telegram.org/bot$TOKEN/sendMessage
+      #
+      # Option 3: Discord Webhook
+      # - Create webhook in Discord channel
+      # - Add DISCORD_WEBHOOK_URL to GitHub Secrets
+      # - Use: curl -X POST $DISCORD_WEBHOOK_URL -d "content=message"
+      #
+      # Option 4: Slack Webhook
+      # - Create Slack app with webhook
+      # - Add SLACK_WEBHOOK_URL to GitHub Secrets
+      # - Use: curl -X POST $SLACK_WEBHOOK_URL -d '{"text":"message"}'
+      # ============================================================
 
       # Step 3: Console Output
-      # Shows information in GitHub Actions logs
       - name: ✅ Console Output
         run: |
           echo ""
-          echo "=== STEP 2 COMPLETED: Email sending initiated ==="
-          echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ DEPLOYMENT NOTIFICATION SENT!"
+          echo "✅ DEPLOYMENT NOTIFICATION WORKFLOW COMPLETED"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           echo "🔗 Production URL:"
@@ -146,7 +87,7 @@ jobs:
           echo "📝 Commit: ${{ github.event.client_payload.commit_sha }}"
           echo "💬 Message: ${{ github.event.client_payload.commit_message }}"
           echo ""
-          echo "📧 Email sent to: a.yudbox@gmail.com"
+          echo "💡 To add notifications, uncomment one of the options in Step 2"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo ""
           echo "=== WORKFLOW END: Success ==="
