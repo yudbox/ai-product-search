@@ -15,10 +15,9 @@ import { VercelKvClient } from "./vercelKvClient";
  */
 function createRedisClient(): IRedisClient {
   try {
-    const isProduction =
-      process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+    const isVercel = process.env.VERCEL === "1";
     const hasVercelKV = !!process.env.KV_REST_API_URL;
-    const shouldUseVercelKV = isProduction || hasVercelKV;
+    const shouldUseVercelKV = isVercel || hasVercelKV;
 
     console.log(
       "🔌 Redis Backend:",
