@@ -1,16 +1,38 @@
 import { NextResponse } from "next/server";
-import { openai } from "@/lib/openai";
-import { index } from "@/lib/pinecone";
+import type { SearchRequest, SearchResponse, ParsedQuery } from "@/lib/types";
+import { parseQueryWithLLM } from "@/lib/utils/queryParser";
+import { normalizeQueryL1 } from "@/lib/utils/cacheHelpers";
+import { trackQueryFrequency, CACHE_PREFIXES } from "@/lib/redis";
 import {
-  SearchRequest,
-  SearchResponse,
-  Product,
-  Gender,
-  ParsedQuery,
-} from "@/lib/types";
-import { parseQueryWithLLM, buildPineconeFilter } from "@/lib/queryParser";
+  generateCacheKey,
+  generateRejectionMessage,
+  generateExplanation,
+} from "@/lib/utils/searchHelpers";
+import { getErrorResponse } from "@/lib/utils/errorHelpers";
+import {
+  checkL1Cache,
+  checkL2Cache,
+  saveToCache,
+  buildCacheMetadata,
+} from "@/lib/services/search/cache";
+import {
+  generateEmbedding,
+  searchPinecone,
+  transformToProducts,
+} from "@/lib/services/search/pinecone";
+import {
+  logSearchRequest,
+  logL1CacheCheck,
+  logCacheHit,
+  logCacheMiss,
+  logParsedQuery,
+  logPineconeFilter,
+  logSearchResults,
+  logCacheSave,
+  logCacheError,
+} from "@/lib/logger";
 
-// Configuration from environment variables
+// Configuration validation
 if (!process.env.OPENAI_EMBEDDING_MODEL) {
   throw new Error("OPENAI_EMBEDDING_MODEL is not configured");
 }
@@ -19,11 +41,8 @@ if (!process.env.PINECONE_NAMESPACE) {
   throw new Error("PINECONE_NAMESPACE is not configured");
 }
 
-const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL;
-const PRODUCTS_NAMESPACE = process.env.PINECONE_NAMESPACE;
-
 export async function POST(req: Request) {
-  let query = ""; // Define outside try for error handling
+  let query = "";
   try {
     const body: SearchRequest = await req.json();
     query = body.query;
@@ -35,34 +54,71 @@ export async function POST(req: Request) {
     }
 
     const startTotal = Date.now();
+    logSearchRequest(query, filters);
 
-    console.log("\n🎯 NEW SEARCH REQUEST:");
-    console.log("  Query:", query);
-    console.log("  UI Filters:", JSON.stringify(filters, null, 2));
+    // L1 CACHE: Normalize query and check cache
+    const startCache = Date.now();
+    const normalizedQuery = normalizeQueryL1(query);
+    const l1CacheKey = generateCacheKey(normalizedQuery, filters);
 
-    // 1. Parse query with LLM to extract structured filters + domain validation (TIER 1)
+    logL1CacheCheck(query, normalizedQuery, l1CacheKey);
+
+    const l1CacheResult = await checkL1Cache(l1CacheKey);
+
+    let semanticQuery: string;
+    let parsedQuery: ParsedQuery | null = null;
+
+    if (l1CacheResult) {
+      // L1 HIT
+      semanticQuery = l1CacheResult;
+      logCacheHit("L1", semanticQuery);
+      await trackQueryFrequency(l1CacheKey);
+
+      // L2 CACHE: Check full results
+      const l2CacheResult = await checkL2Cache(semanticQuery, filters);
+
+      if (l2CacheResult) {
+        // L2 HIT: Return cached results
+        logCacheHit("L2");
+        const cacheTime = Date.now() - startCache;
+
+        return NextResponse.json({
+          success: true,
+          query,
+          count: l2CacheResult.count,
+          products: l2CacheResult.products,
+          explanation: l2CacheResult.explanation,
+          cached: true,
+          cacheMetadata: buildCacheMetadata(
+            normalizedQuery,
+            l1CacheKey,
+            true,
+            true,
+          ),
+          performance: {
+            parsing: "0ms (cached)",
+            embedding: "0ms (cached)",
+            search: "0ms (cached)",
+            cache: `${cacheTime}ms`,
+            total: `${Date.now() - startTotal}ms`,
+          },
+        } satisfies SearchResponse);
+      }
+
+      logCacheMiss("L2");
+    } else {
+      logCacheMiss("L1");
+    }
+
+    // FULL SEARCH: Parse with LLM
     const startParsing = Date.now();
-    const parsedQuery = await parseQueryWithLLM(query);
+    parsedQuery = await parseQueryWithLLM(query);
     const parsingTime = Date.now() - startParsing;
+    semanticQuery = parsedQuery.semanticQuery;
 
-    console.log("\n🔍 LLM PARSED QUERY:");
-    console.log("  semanticQuery:", parsedQuery.semanticQuery);
-    console.log("  gender:", parsedQuery.gender || "(not set)");
-    console.log("  category:", parsedQuery.category || "(not set)");
-    console.log("  brand:", parsedQuery.brand || "(not set)");
-    console.log("  color:", parsedQuery.color || "(not set)");
-    console.log(
-      "  minPrice:",
-      parsedQuery.minPrice !== undefined ? parsedQuery.minPrice : "(not set)",
-    );
-    console.log(
-      "  maxPrice:",
-      parsedQuery.maxPrice !== undefined ? parsedQuery.maxPrice : "(not set)",
-    );
-    console.log("  Full parsed:", JSON.stringify(parsedQuery, null, 2));
+    logParsedQuery(parsedQuery);
 
-    // ❌ TIER 1: Early rejection for non-footwear queries
-    // This saves money on embedding + Pinecone costs
+    // TIER 1: Early rejection for non-footwear queries
     if (parsedQuery.isRelevant === false) {
       const helpMessage = generateRejectionMessage(
         parsedQuery.rejectionReason,
@@ -88,131 +144,101 @@ export async function POST(req: Request) {
       });
     }
 
-    // 2. Generate embedding for semantic query (cleaned from filters)
+    // Generate embedding
     const startEmbedding = Date.now();
-    const embeddingResponse = await openai.embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: parsedQuery.semanticQuery.toLowerCase().trim(),
-    });
-    const queryEmbedding = embeddingResponse.data[0].embedding;
+    const queryEmbedding = await generateEmbedding(parsedQuery.semanticQuery);
     const embeddingTime = Date.now() - startEmbedding;
 
-    // 3. Build Pinecone filter from parsed query + UI filters
-    const pineconeFilter = buildPineconeFilter(parsedQuery, filters);
-
-    console.log("\n📊 PINECONE FILTER:");
-    if (pineconeFilter) {
-      console.log("  gender:", pineconeFilter.gender || "(not applied)");
-      console.log(
-        "  price:",
-        pineconeFilter.price
-          ? JSON.stringify(pineconeFilter.price)
-          : "(not applied)",
-      );
-      console.log("  brand:", pineconeFilter.brand || "(not applied)");
-      console.log("  category:", pineconeFilter.category || "(not applied)");
-      console.log("  color:", pineconeFilter.color || "(not applied)");
-      console.log("  Full filter:", JSON.stringify(pineconeFilter, null, 2));
-    } else {
-      console.log("  No filters applied - searching all products");
-    }
-
-    // 4. Query Pinecone with metadata filtering (TIER 2)
+    // Search Pinecone
     const startSearch = Date.now();
-    const namespace = index.namespace(PRODUCTS_NAMESPACE);
-
-    // Request all matching products (up to database limit)
-    // With smart filtering in Pinecone, we get only relevant results
-    const topKWithBuffer =
-      excludedIds && excludedIds.length > 0
-        ? Math.min(50 + excludedIds.length, 100)
-        : 50;
-
-    const searchResults = await namespace.query({
-      vector: queryEmbedding,
-      ...(pineconeFilter && { filter: pineconeFilter }), // Apply filter only if exists
-      topK: topKWithBuffer,
-      includeMetadata: true,
-    });
+    const { searchResults, pineconeFilter } = await searchPinecone(
+      queryEmbedding,
+      parsedQuery,
+      filters,
+      excludedIds,
+    );
     const searchTime = Date.now() - startSearch;
 
-    console.log(
-      `\n🔎 PINECONE SEARCH RESULTS: ${searchResults.matches.length} matches found`,
-    );
-    if (searchResults.matches.length > 0) {
-      const prices = searchResults.matches
-        .map((m) => m.metadata?.price)
-        .filter((p): p is number => typeof p === "number");
-      console.log(
-        "  Price range:",
-        prices.length > 0 ? Math.min(...prices) : "N/A",
-        "-",
-        prices.length > 0 ? Math.max(...prices) : "N/A",
-      );
-      console.log(
-        "  First 5 products:",
-        searchResults.matches.slice(0, 5).map((m) => ({
-          name: m.metadata?.name,
-          price: m.metadata?.price,
-          gender: m.metadata?.gender,
-          category: m.metadata?.category,
-          score: m.score?.toFixed(3),
-        })),
-      );
-    } else {
-      console.log("  ⚠️ No matches found - filter might be too restrictive!");
-    }
+    logPineconeFilter(pineconeFilter ?? null);
+    logSearchResults(searchResults.matches);
 
-    // 5. TIER 3: Filter by relevance score threshold (OPTIONAL)
-    // For now, we disable strict filtering - vector search scores are naturally low
-    // Pinecone already returns results sorted by relevance
-    const relevantMatches = searchResults.matches; // No filtering
+    // Transform results to Product objects
+    const products = transformToProducts(searchResults.matches, excludedIds);
 
-    // 6. Convert to Product objects and filter out excluded IDs only
-    const excludedSet = new Set(excludedIds || []);
-    const products: Product[] = relevantMatches
-      .filter((match) => !excludedSet.has(match.id))
-      .map((match) => {
-        const metadata = match.metadata as Record<string, unknown>;
-        return {
-          id: match.id,
-          name: (metadata.name as string) || "",
-          description: (metadata.description as string) || "",
-          price: (metadata.price as number) || 0,
-          image: (metadata.image as string) || "",
-          brand: (metadata.brand as string) || "",
-          category: (metadata.category as string) || "",
-          color: (metadata.color as string) || "",
-          sizes: (metadata.sizes as number[]) || [],
-          inStock: metadata.inStock !== false,
-          rating: (metadata.rating as number) || 0,
-          features: (metadata.features as string[]) || [],
-          gender: (metadata.gender as Gender) || Gender.Unisex,
-        };
-      });
-
-    // 7. Generate AI explanation (TIER 4)
+    // Generate AI explanation
     const explanation = generateExplanation(query, products, parsedQuery);
 
     const totalTime = Date.now() - startTotal;
 
-    const response: SearchResponse = {
-      success: true,
-      query,
-      count: products.length,
-      products,
-      explanation,
-      suggestedQuery:
-        products.length === 0 ? parsedQuery.suggestedQuery : undefined,
-      performance: {
-        parsing: `${parsingTime}ms`,
-        embedding: `${embeddingTime}ms`,
-        search: `${searchTime}ms`,
-        total: `${totalTime}ms`,
-      },
-    };
+    // Save to cache
+    try {
+      const { ttl, frequency } = await saveToCache(
+        l1CacheKey,
+        semanticQuery,
+        products,
+        explanation || "",
+        parsedQuery,
+        filters,
+      );
 
-    return NextResponse.json(response);
+      logCacheSave(
+        `${CACHE_PREFIXES.L1}${l1CacheKey}`,
+        `${CACHE_PREFIXES.L2}${generateCacheKey(semanticQuery, filters)}`,
+        ttl,
+        frequency,
+      );
+
+      return NextResponse.json({
+        success: true,
+        query,
+        count: products.length,
+        products,
+        explanation,
+        cached: false,
+        cacheMetadata: buildCacheMetadata(
+          normalizedQuery,
+          l1CacheKey,
+          false,
+          false,
+          ttl,
+          frequency,
+        ),
+        suggestedQuery:
+          products.length === 0 ? parsedQuery?.suggestedQuery : undefined,
+        performance: {
+          parsing: `${parsingTime}ms`,
+          embedding: `${embeddingTime}ms`,
+          search: `${searchTime}ms`,
+          total: `${totalTime}ms`,
+        },
+      } satisfies SearchResponse);
+    } catch (cacheError) {
+      logCacheError(cacheError);
+
+      // Return response even if cache save failed
+      return NextResponse.json({
+        success: true,
+        query,
+        count: products.length,
+        products,
+        explanation,
+        cached: false,
+        cacheMetadata: buildCacheMetadata(
+          normalizedQuery,
+          l1CacheKey,
+          false,
+          false,
+        ),
+        suggestedQuery:
+          products.length === 0 ? parsedQuery?.suggestedQuery : undefined,
+        performance: {
+          parsing: `${parsingTime}ms`,
+          embedding: `${embeddingTime}ms`,
+          search: `${searchTime}ms`,
+          total: `${totalTime}ms`,
+        },
+      } satisfies SearchResponse);
+    }
   } catch (error: unknown) {
     console.error("❌ Search error:", error);
     const errorMessage =
@@ -221,128 +247,20 @@ export async function POST(req: Request) {
     if (errorStack) {
       console.error("Error stack:", errorStack);
     }
+
+    // Get user-friendly error message based on error type
+    const { userMessage, statusCode } = getErrorResponse(errorMessage);
+
     return NextResponse.json(
       {
         success: false,
-        error: "Search failed",
+        error: userMessage,
         details: errorMessage,
         query,
         count: 0,
         products: [],
       },
-      { status: 500 },
+      { status: statusCode },
     );
   }
-}
-
-// TIER 1: Generate rejection message for non-relevant queries
-function generateRejectionMessage(
-  reason: string | undefined,
-  suggestion: string | undefined,
-  originalQuery: string,
-): string {
-  const messages: Record<string, string> = {
-    not_footwear: `We only sell footwear (shoes, sneakers, boots, sandals). "${originalQuery}" is not a shoe product.`,
-    question_not_search: `Please search for products instead of asking questions. Try searching for specific shoes like "red running shoes" or "winter boots".`,
-    nonsense: `We couldn't understand your search: "${originalQuery}". Please try a clear product name like "Nike sneakers" or "leather boots".`,
-  };
-
-  let message =
-    messages[reason as keyof typeof messages] ||
-    `No products found for "${originalQuery}".`;
-
-  if (suggestion) {
-    message += ` Try searching for: "${suggestion}"`;
-  }
-
-  return message;
-}
-
-// Generate AI explanation of search results
-function generateExplanation(
-  originalQuery: string,
-  products: Product[],
-  parsedQuery: ParsedQuery,
-): string {
-  if (products.length === 0) {
-    let message = `No products found for "${originalQuery}".`;
-
-    // Explain applied filters
-    const filterParts: string[] = [];
-    const suggestions: string[] = [];
-
-    if (parsedQuery.gender) {
-      filterParts.push(`gender: ${parsedQuery.gender}`);
-    }
-    if (parsedQuery.maxPrice) {
-      filterParts.push(`max price: $${parsedQuery.maxPrice}`);
-    }
-    if (parsedQuery.minPrice) {
-      filterParts.push(`min price: $${parsedQuery.minPrice}`);
-    }
-    if (parsedQuery.color) {
-      filterParts.push(`color: ${parsedQuery.color}`);
-      suggestions.push("try without color filter");
-    }
-    if (parsedQuery.brand) {
-      filterParts.push(`brand: ${parsedQuery.brand}`);
-      suggestions.push("try different brands");
-    }
-
-    if (filterParts.length > 0) {
-      message += ` Applied filters: ${filterParts.join(", ")}.`;
-    }
-
-    // Add helpful suggestions
-    if (suggestions.length > 0) {
-      message += ` Try: ${suggestions.join(" or ")}.`;
-    } else {
-      message += " Try adjusting your search or removing filters.";
-    }
-
-    // Suggest alternative query if available
-    if (parsedQuery.suggestedQuery) {
-      message += ` Or search: "${parsedQuery.suggestedQuery}"`;
-    }
-
-    return message;
-  }
-
-  const topProducts = products.slice(0, 3).map((p) => p.name);
-  const brands = [...new Set(products.map((p) => p.brand))];
-  const avgPrice = Math.round(
-    products.reduce((sum, p) => sum + p.price, 0) / products.length,
-  );
-
-  let explanation = `Found ${products.length} products matching "${originalQuery}".`;
-
-  // Add context about parsed understanding
-  if (parsedQuery.semanticQuery !== originalQuery) {
-    explanation += ` Searching for: ${parsedQuery.semanticQuery}.`;
-  }
-
-  // Explain filters
-  const filterParts: string[] = [];
-  if (parsedQuery.gender) {
-    filterParts.push(`${parsedQuery.gender}'s shoes`);
-  }
-  if (parsedQuery.maxPrice) {
-    filterParts.push(`under $${parsedQuery.maxPrice}`);
-  }
-  if (parsedQuery.color) {
-    filterParts.push(`${parsedQuery.color} color`);
-  }
-
-  if (filterParts.length > 0) {
-    explanation += ` Filters: ${filterParts.join(", ")}.`;
-  }
-
-  explanation += ` Top results: ${topProducts.join(", ")}. Brands: ${brands.slice(0, 5).join(", ")}. Avg price: $${avgPrice}.`;
-
-  // Add special terms context if any
-  if (parsedQuery.specialTerms && parsedQuery.specialTerms.length > 0) {
-    explanation += ` [Understood: ${parsedQuery.specialTerms.join(", ")}]`;
-  }
-
-  return explanation;
 }
