@@ -23,12 +23,13 @@ const customJestConfig = {
   collectCoverageFrom: [
     "app/**/*.{js,jsx,ts,tsx}",
     "components/**/*.{js,jsx,ts,tsx}",
+    "lib/**/*.{js,jsx,ts,tsx}",
     "!app/api/**", // Exclude API routes from integration coverage
     "!app/layout.tsx", // Exclude root layout (infrastructure only)
     "!**/*.d.ts",
     "!**/node_modules/**",
     "!**/.next/**",
-    "!lib/**/*",
+    "!lib/types.ts",
     "!**/__tests__/**",
   ],
   coverageDirectory: "coverage/integration",

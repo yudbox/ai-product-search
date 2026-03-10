@@ -1,5 +1,5 @@
-import { openai } from "./openai";
-import { ParsedQuery, Gender } from "./types";
+import { openai } from "../openai";
+import { ParsedQuery, Gender } from "../types";
 
 // Price validation constants
 const MIN_VALID_PRICE = 0;

@@ -51,11 +51,13 @@ export interface SearchResponse {
   rejected?: boolean;
   rejectionReason?: string;
   suggestedQuery?: string;
+  cacheMetadata?: CacheMetadata;
   performance?: {
     embedding: string;
     search: string;
     total: string;
     parsing?: string;
+    cache?: string;
   };
 }
 
@@ -82,4 +84,23 @@ export interface ParsedQuery {
   originalQuery: string;
   detectedLanguage?: string;
   specialTerms?: string[]; // e.g., "пятихатка", "герла"
+}
+
+// Cache-related types
+export interface CachedSearchResult {
+  products: Product[];
+  explanation: string;
+  count: number;
+  parsedQuery?: ParsedQuery;
+  timestamp: number; // When cached
+  filters?: SearchFilters; // UI filters used
+}
+
+export interface CacheMetadata {
+  l1Hit: boolean; // L1 cache (normalized text) hit
+  l2Hit: boolean; // L2 cache (semanticQuery) hit
+  cacheKey?: string; // Cache key used
+  normalizedQuery?: string; // L1 normalized version
+  ttl?: number; // TTL applied (seconds)
+  frequency?: number; // Query hit count
 }
