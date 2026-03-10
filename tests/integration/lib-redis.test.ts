@@ -822,37 +822,54 @@ describe("Integration: lib/redis/index", () => {
   });
 
   describe("getAdaptiveTTL", () => {
-    it("should return HOT TTL for popular queries", async () => {
-      mockedKv.zscore.mockResolvedValue(10);
+    let zscoreSpy: jest.SpyInstance;
+    let getAdaptiveTTL: (cacheKey: string) => Promise<number>;
+    let TTL_STRATEGY: { HOT: number; WARM: number; COLD: number };
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
+    beforeAll(async () => {
+      const redisModule = await import("@/lib/redis");
+      zscoreSpy = jest.spyOn(redisModule.redis, "zscore");
+      getAdaptiveTTL = redisModule.getAdaptiveTTL;
+      TTL_STRATEGY = redisModule.TTL_STRATEGY;
+    });
+
+    beforeEach(() => {
+      zscoreSpy.mockClear();
+    });
+
+    afterAll(() => {
+      if (zscoreSpy) {
+        zscoreSpy.mockRestore();
+      }
+    });
+
+    it("should return HOT TTL for popular queries", async () => {
+      zscoreSpy.mockResolvedValue(10);
+
       const ttl = await getAdaptiveTTL("popular-query");
 
       expect(ttl).toBe(TTL_STRATEGY.HOT);
     });
 
     it("should return WARM TTL for moderate queries", async () => {
-      mockedKv.zscore.mockResolvedValue(3);
+      zscoreSpy.mockResolvedValue(3);
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
       const ttl = await getAdaptiveTTL("moderate-query");
 
       expect(ttl).toBe(TTL_STRATEGY.WARM);
     });
 
     it("should return COLD TTL for rare queries", async () => {
-      mockedKv.zscore.mockResolvedValue(1);
+      zscoreSpy.mockResolvedValue(1);
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
       const ttl = await getAdaptiveTTL("rare-query");
 
       expect(ttl).toBe(TTL_STRATEGY.COLD);
     });
 
     it("should return COLD TTL for new queries", async () => {
-      mockedKv.zscore.mockResolvedValue(null);
+      zscoreSpy.mockResolvedValue(null);
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
       const ttl = await getAdaptiveTTL("new-query");
 
       expect(ttl).toBe(TTL_STRATEGY.COLD);
@@ -860,33 +877,30 @@ describe("Integration: lib/redis/index", () => {
 
     it("should return COLD TTL on error", async () => {
       const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
-      mockedKv.zscore.mockRejectedValue(new Error("Redis error"));
+      zscoreSpy.mockRejectedValue(new Error("Redis error"));
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
       const ttl = await getAdaptiveTTL("error-query");
 
       expect(ttl).toBe(TTL_STRATEGY.COLD);
-      // Console.warn comes from VercelKvClient.zscore, not from getAdaptiveTTL
+      // Console.warn comes from getAdaptiveTTL when Redis fails
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '⚠️ Vercel KV ZSCORE failed for key "freq:queries":',
+        "⚠️ Adaptive TTL calculation failed (Redis unavailable):",
         "Redis error",
       );
       consoleWarnSpy.mockRestore();
     });
 
     it("should handle exact threshold boundaries", async () => {
-      mockedKv.zscore.mockResolvedValue(5);
+      zscoreSpy.mockResolvedValue(5);
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
       const ttl = await getAdaptiveTTL("boundary-query");
 
       expect(ttl).toBe(TTL_STRATEGY.HOT);
     });
 
     it("should handle WARM threshold boundary", async () => {
-      mockedKv.zscore.mockResolvedValue(2);
+      zscoreSpy.mockResolvedValue(2);
 
-      const { getAdaptiveTTL, TTL_STRATEGY } = await import("@/lib/redis");
       const ttl = await getAdaptiveTTL("warm-boundary");
 
       expect(ttl).toBe(TTL_STRATEGY.WARM);
@@ -894,43 +908,55 @@ describe("Integration: lib/redis/index", () => {
   });
 
   describe("trackQueryFrequency", () => {
-    it("should increment query frequency counter", async () => {
-      mockedKv.zincrby.mockResolvedValue(1);
+    let zincrbySpy: jest.SpyInstance;
+    let trackQueryFrequency: (cacheKey: string) => Promise<void>;
 
-      const { trackQueryFrequency } = await import("@/lib/redis");
+    beforeAll(async () => {
+      const redisModule = await import("@/lib/redis");
+      zincrbySpy = jest.spyOn(redisModule.redis, "zincrby");
+      trackQueryFrequency = redisModule.trackQueryFrequency;
+    });
+
+    beforeEach(() => {
+      zincrbySpy.mockClear();
+    });
+
+    afterAll(() => {
+      if (zincrbySpy) {
+        zincrbySpy.mockRestore();
+      }
+    });
+
+    it("should increment query frequency counter", async () => {
+      zincrbySpy.mockResolvedValue(1);
+
       await trackQueryFrequency("test-query");
 
-      expect(mockedKv.zincrby).toHaveBeenCalledWith(
-        "freq:queries",
-        1,
-        "test-query",
-      );
+      expect(zincrbySpy).toHaveBeenCalledWith("freq:queries", 1, "test-query");
     });
 
     it("should not throw on error", async () => {
       const consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation();
-      mockedKv.zincrby.mockRejectedValue(new Error("Redis error"));
+      zincrbySpy.mockRejectedValue(new Error("Redis error"));
 
-      const { trackQueryFrequency } = await import("@/lib/redis");
       await expect(trackQueryFrequency("error-query")).resolves.toBeUndefined();
 
-      // Console.warn comes from VercelKvClient.zincrby, not from trackQueryFrequency
+      // Console.warn comes from trackQueryFrequency when Redis fails
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        '⚠️ Vercel KV ZINCRBY failed for key "freq:queries":',
+        "⚠️ Query frequency tracking failed (Redis unavailable):",
         "Redis error",
       );
       consoleWarnSpy.mockRestore();
     });
 
     it("should track multiple queries", async () => {
-      mockedKv.zincrby.mockResolvedValue(1);
+      zincrbySpy.mockResolvedValue(1);
 
-      const { trackQueryFrequency } = await import("@/lib/redis");
       await trackQueryFrequency("query1");
       await trackQueryFrequency("query2");
       await trackQueryFrequency("query1");
 
-      expect(mockedKv.zincrby).toHaveBeenCalledTimes(3);
+      expect(zincrbySpy).toHaveBeenCalledTimes(3);
     });
   });
 });
