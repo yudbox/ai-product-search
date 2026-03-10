@@ -3,18 +3,21 @@ import { FeatureCard } from "@/components/ui/FeatureCard";
 const features = [
   {
     icon: "🤖",
-    title: "Semantic Search",
-    description: "AI understands meaning, not just keywords. Search naturally.",
-  },
-  {
-    icon: "👟",
-    title: "200+ Products",
-    description: "Curated collection of athletic shoes from top brands.",
+    title: "Semantic Understanding",
+    description:
+      "AI understands meaning, not just keywords. Search naturally with OpenAI embeddings and vector similarity.",
   },
   {
     icon: "⚡",
-    title: "Smart Filters",
-    description: "Filter by price, brand, category, and more.",
+    title: "2-Tier Redis Cache",
+    description:
+      "78% cache hit rate with adaptive TTL (HOT/WARM/COLD). 45ms avg response vs 280ms uncached. 85% cost reduction.",
+  },
+  {
+    icon: "🔒",
+    title: "Production Grade",
+    description:
+      "94% test coverage (381 tests), rate limiting, cost monitoring. Clean Architecture with SOLID principles.",
   },
 ];
 

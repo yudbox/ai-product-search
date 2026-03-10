@@ -111,23 +111,27 @@ describe("Home Page", () => {
 
   it("renders all three feature cards", () => {
     render(<Home />);
-    expect(screen.getByText("Semantic Search")).toBeInTheDocument();
-    expect(screen.getByText("200+ Products")).toBeInTheDocument();
-    expect(screen.getByText("Smart Filters")).toBeInTheDocument();
+    expect(screen.getByText("Semantic Understanding")).toBeInTheDocument();
+    expect(screen.getByText("2-Tier Redis Cache")).toBeInTheDocument();
+    expect(screen.getByText("Production Grade")).toBeInTheDocument();
   });
 
   it("renders feature card descriptions", () => {
     render(<Home />);
     expect(
       screen.getByText(
-        "AI understands meaning, not just keywords. Search naturally.",
+        "AI understands meaning, not just keywords. Search naturally with OpenAI embeddings and vector similarity.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Curated collection of athletic shoes from top brands."),
+      screen.getByText(
+        "78% cache hit rate with adaptive TTL (HOT/WARM/COLD). 45ms avg response vs 280ms uncached. 85% cost reduction.",
+      ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Filter by price, brand, category, and more."),
+      screen.getByText(
+        "94% test coverage (381 tests), rate limiting, cost monitoring. Clean Architecture with SOLID principles.",
+      ),
     ).toBeInTheDocument();
   });
 
