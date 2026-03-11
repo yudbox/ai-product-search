@@ -51,6 +51,7 @@ export interface SearchResponse {
   rejected?: boolean;
   rejectionReason?: string;
   suggestedQuery?: string;
+  hasMoreResults?: boolean;
   cacheMetadata?: CacheMetadata;
   performance?: {
     embedding: string;

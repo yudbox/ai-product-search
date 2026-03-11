@@ -3,6 +3,7 @@ import type { SearchRequest, SearchResponse, ParsedQuery } from "@/lib/types";
 import { parseQueryWithLLM } from "@/lib/utils/queryParser";
 import { normalizeQueryL1 } from "@/lib/utils/cacheHelpers";
 import { trackQueryFrequency, CACHE_PREFIXES } from "@/lib/redis";
+import { SEARCH_CONFIG } from "@/lib/constants/search";
 import {
   generateCacheKey,
   generateRejectionMessage,
@@ -67,46 +68,48 @@ export async function POST(req: Request) {
     let parsedQuery: ParsedQuery | null = null;
 
     if (l1CacheResult) {
-      // L1 HIT
       semanticQuery = l1CacheResult;
       logCacheHit("L1", semanticQuery);
       await trackQueryFrequency(l1CacheKey);
 
-      // L2 CACHE: Check full results
-      const l2CacheResult = await checkL2Cache(semanticQuery, filters);
+      const isLoadMoreRequest = excludedIds && excludedIds.length > 0;
 
-      if (l2CacheResult) {
-        // L2 HIT: Return cached results
-        logCacheHit("L2");
+      if (!isLoadMoreRequest) {
+        const l2CacheResult = await checkL2Cache(semanticQuery, filters);
 
-        return NextResponse.json({
-          success: true,
-          query,
-          count: l2CacheResult.count,
-          products: l2CacheResult.products,
-          explanation: l2CacheResult.explanation,
-          cached: true,
-          cacheMetadata: buildCacheMetadata(
-            normalizedQuery,
-            l1CacheKey,
-            true,
-            true,
-          ),
-        } satisfies SearchResponse);
+        if (l2CacheResult) {
+          logCacheHit("L2");
+
+          return NextResponse.json({
+            success: true,
+            query,
+            count: l2CacheResult.count,
+            products: l2CacheResult.products,
+            explanation: l2CacheResult.explanation,
+            hasMoreResults: true,
+            cached: true,
+            cacheMetadata: buildCacheMetadata(
+              normalizedQuery,
+              l1CacheKey,
+              true,
+              true,
+            ),
+          } satisfies SearchResponse);
+        }
+
+        logCacheMiss("L2");
+      } else {
+        logCacheMiss("L2");
       }
-
-      logCacheMiss("L2");
     } else {
       logCacheMiss("L1");
     }
 
-    // FULL SEARCH: Parse with LLM
     parsedQuery = await parseQueryWithLLM(query);
     semanticQuery = parsedQuery.semanticQuery;
 
     logParsedQuery(parsedQuery);
 
-    // TIER 1: Early rejection for non-footwear queries
     if (parsedQuery.isRelevant === false) {
       const helpMessage = generateRejectionMessage(
         parsedQuery.rejectionReason,
@@ -126,10 +129,8 @@ export async function POST(req: Request) {
       });
     }
 
-    // Generate embedding
     const queryEmbedding = await generateEmbedding(parsedQuery.semanticQuery);
 
-    // Search Pinecone
     const { searchResults, pineconeFilter } = await searchPinecone(
       queryEmbedding,
       parsedQuery,
@@ -140,13 +141,13 @@ export async function POST(req: Request) {
     logPineconeFilter(pineconeFilter ?? null);
     logSearchResults(searchResults.matches);
 
-    // Transform results to Product objects
     const products = transformToProducts(searchResults.matches, excludedIds);
 
-    // Generate AI explanation
+    const hasMoreResults =
+      (excludedIds?.length || 0) < SEARCH_CONFIG.INITIAL_TOP_K;
+
     const explanation = generateExplanation(query, products, parsedQuery);
 
-    // Save to cache
     try {
       const { ttl, frequency } = await saveToCache(
         l1CacheKey,
@@ -170,6 +171,7 @@ export async function POST(req: Request) {
         count: products.length,
         products,
         explanation,
+        hasMoreResults,
         cached: false,
         cacheMetadata: buildCacheMetadata(
           normalizedQuery,
@@ -192,6 +194,7 @@ export async function POST(req: Request) {
         count: products.length,
         products,
         explanation,
+        hasMoreResults,
         cached: false,
         cacheMetadata: buildCacheMetadata(
           normalizedQuery,

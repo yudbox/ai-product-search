@@ -22,6 +22,7 @@ describe("hooks barrel export", () => {
       "useActiveFilters",
       "useSearchFilters",
       "useProductSearch",
+      "useThrottle",
     ].sort();
 
     expect(exportedKeys).toEqual(expectedKeys);

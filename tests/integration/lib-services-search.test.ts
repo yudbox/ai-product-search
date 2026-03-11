@@ -106,9 +106,9 @@ jest.mock("@/lib/pinecone", () => ({
 
 const mockedRedis = jest.mocked(redis);
 const mockedGetAdaptiveTTL = jest.mocked(getAdaptiveTTL);
-const _mockedTrackQueryFrequency = jest.mocked(trackQueryFrequency);
 const mockedOpenai = jest.mocked(openai);
 const mockedIndex = jest.mocked(index);
+jest.mocked(trackQueryFrequency);
 
 describe("Integration: lib/services/search/cache", () => {
   beforeEach(() => {

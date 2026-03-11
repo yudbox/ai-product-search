@@ -1,0 +1,11 @@
+export const SEARCH_CONFIG = {
+  INITIAL_TOP_K: 50,
+  MAX_TOP_K: 100,
+  BATCH_SIZE: 12,
+  LOAD_MORE_DEBOUNCE_MS: 500,
+} as const;
+
+export const INFINITE_SCROLL_CONFIG = {
+  THRESHOLD: 0.1,
+  SIMULATED_DELAY_MS: 300,
+} as const;

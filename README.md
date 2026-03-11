@@ -478,6 +478,104 @@ After deploying each new AI project:
 
 ---
 
+## 🔮 Out of Scope / Future Enhancements
+
+This project is production-ready as-is. The following features were considered but intentionally excluded to maintain focus on core functionality (semantic search + caching). They may be added in future iterations if needed for portfolio expansion.
+
+### Product Recommendations (Inline Carousel)
+
+**Concept:** Display AI-powered product recommendations based on vector similarity, positioned organically within search results.
+
+**UI/UX Design:**
+
+```
+Search Results for "nike sneakers":
+
+┌─────┐ ┌─────┐ ┌─────┐  Row 1: Nike Air Max, Nike Force, Nike Dunk
+└─────┘ └─────┘ └─────┘
+
+┌─────┐ ┌─────┐ ┌─────┐  Row 2: Nike Blazer, Nike Cortez, Nike Pegasus
+└─────┘ └─────┘ └─────┘
+
+┌─────┐ ┌─────┐ ┌─────┐  Row 3: Nike React, Nike Zoom, Nike Vomero
+└─────┘ └─────┘ └─────┘
+
+╔═══════════════════════════════════════╗
+║ 💡 You might also like                ║  ← Inline Recommendations Block
+║ Similar styles based on your search   ║     (appears with fade-in animation)
+║                                       ║
+║  ◀  [Adidas]  [Reebok]  [New Balance]  ▶  ║  ← Horizontal Carousel
+╚═══════════════════════════════════════╝
+
+┌─────┐ ┌─────┐ ┌─────┐  Row 4: Nike Winflo, Nike Revolution...
+└─────┘ └─────┘ └─────┘
+```
+
+**Technical Implementation:**
+
+1. **Positioning:** Insert after 3rd row (~9 products) of search results
+2. **Animation:** Fade-in + slide-up on scroll (using `framer-motion` or CSS `IntersectionObserver`)
+3. **Data Source:** Pinecone vector similarity search with:
+   - **Filter:** Exclude current brand (if user searched "nike", show Adidas/Reebok/etc.)
+   - **Query:** User's search embedding (reuse from main search)
+   - **Limit:** 6-8 products
+4. **Carousel:** Horizontal scroll (native CSS `scroll-snap`) with navigation arrows
+5. **Caching:** Recommendations cached separately with 24h TTL
+
+**Component Structure:**
+
+```tsx
+// components/RecommendedProducts.tsx
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  viewport={{ once: true }}
+  className="my-8 rounded-lg border border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 p-6"
+>
+  <h3 className="mb-4 text-lg font-semibold">💡 You might also like</h3>
+  <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory">
+    {recommendations.map((product) => (
+      <ProductCard key={product.id} product={product} compact />
+    ))}
+  </div>
+</motion.div>
+```
+
+**API Endpoint:**
+
+```typescript
+// app/api/recommendations/route.ts
+GET /api/recommendations?query=nike&exclude_brand=Nike&limit=6
+
+Response:
+{
+  "recommendations": [...],
+  "cached": true,
+  "similarityScore": 0.85
+}
+```
+
+**Why Out of Scope:**
+
+- **MVP is complete:** Semantic search + caching is the core value prop
+- **Time investment:** ~4-5 hours for production-quality implementation (animations, tests, edge cases)
+- **Diminishing returns:** Doesn't showcase new technical skills (already have vector search)
+- **Portfolio clarity:** Cleaner to focus on: "This project = RAG + Redis + Testing"
+
+**When to Implement:**
+
+- If portfolio needs differentiation ("What makes your search unique?")
+- If interviewer asks: "How would you add recommendations?"
+- If building real e-commerce product (high business value for conversion rates)
+
+**Estimated Effort:**
+
+- Minimal version (no animation, basic carousel): **2-3 hours**
+- Production version (with animations, tests, caching): **4-5 hours**
+- Full version (A/B testing, click tracking, analytics): **8-10 hours**
+
+---
+
 **Built with ❤️ using Next.js, OpenAI, Pinecone, and Redis**
 
 _Portfolio project demonstrating production-grade AI integration, testing practices, and security implementation_

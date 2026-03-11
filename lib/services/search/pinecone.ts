@@ -8,6 +8,7 @@ import { index } from "@/lib/pinecone";
 import type { Product, ParsedQuery, SearchRequest } from "@/lib/types";
 import { Gender } from "@/lib/types";
 import { buildPineconeFilter } from "@/lib/utils/queryParser";
+import { SEARCH_CONFIG } from "@/lib/constants/search";
 
 const EMBEDDING_MODEL = process.env.OPENAI_EMBEDDING_MODEL!;
 const PRODUCTS_NAMESPACE = process.env.PINECONE_NAMESPACE!;
@@ -49,8 +50,11 @@ export async function searchPinecone(
 
     const topKWithBuffer =
       excludedIds && excludedIds.length > 0
-        ? Math.min(50 + excludedIds.length, 100)
-        : 50;
+        ? Math.min(
+            SEARCH_CONFIG.INITIAL_TOP_K + excludedIds.length,
+            SEARCH_CONFIG.MAX_TOP_K,
+          )
+        : SEARCH_CONFIG.INITIAL_TOP_K;
 
     const searchResults = await namespace.query({
       vector: embedding,

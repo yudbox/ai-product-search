@@ -29,6 +29,7 @@ describe("useProductSearch", () => {
     totalBeforeFilters: 50,
     products: mockProducts,
     explanation: "Found great running shoes",
+    hasMoreResults: false,
   };
 
   beforeEach(() => {
