@@ -9,6 +9,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useSearchFilters } from "@/hooks/useSearchFilters";
 import { useProductSearch } from "@/hooks/useProductSearch";
 import { useEffect, useRef, useState } from "react";
+import { INFINITE_SCROLL_CONFIG } from "@/lib/constants/search";
 
 export function SearchPage() {
   const searchParams = useSearchParams();
@@ -38,23 +39,27 @@ export function SearchPage() {
     loadMore,
   } = useProductSearch({ query, filters });
 
-  // Intersection Observer for infinite scroll
+  const loadMoreFnRef = useRef(loadMore);
+  useEffect(() => {
+    loadMoreFnRef.current = loadMore;
+  }, [loadMore]);
+
   useEffect(() => {
     if (!loadMoreRef.current || loading || loadingMore || !hasMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          loadMore();
+          loadMoreFnRef.current();
         }
       },
-      { threshold: 0.1 },
+      { threshold: INFINITE_SCROLL_CONFIG.THRESHOLD },
     );
 
     observer.observe(loadMoreRef.current);
 
     return () => observer.disconnect();
-  }, [loading, loadingMore, hasMore, loadMore]);
+  }, [loading, loadingMore, hasMore]);
 
   return (
     <div className="min-h-screen bg-gray-50">

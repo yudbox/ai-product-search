@@ -12,8 +12,8 @@ process.env.KV_REST_API_TOKEN = "test-kv-token";
 // Mock Next.js Image component
 jest.mock("next/image", () => ({
   __esModule: true,
-  default: (props) => {
-    // eslint-disable-next-line jsx-a11y/alt-text
-    return <img {...props} />;
+  default: ({ alt = "", ...props }) => {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img alt={alt} {...props} />;
   },
 }));

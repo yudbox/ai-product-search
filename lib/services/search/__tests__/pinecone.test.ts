@@ -28,6 +28,7 @@ import { openai } from "@/lib/openai";
 import { index } from "@/lib/pinecone";
 import { buildPineconeFilter } from "@/lib/utils/queryParser";
 import { Gender } from "@/lib/types";
+import { SEARCH_CONFIG } from "@/lib/constants/search";
 import type { ParsedQuery } from "@/lib/types";
 
 const mockOpenAI = jest.mocked(openai);
@@ -134,7 +135,7 @@ describe("pinecone service", () => {
       );
       expect(mockNamespace.query).toHaveBeenCalledWith({
         vector: mockEmbedding,
-        topK: 50,
+        topK: SEARCH_CONFIG.INITIAL_TOP_K,
         includeMetadata: true,
       });
     });
@@ -156,7 +157,7 @@ describe("pinecone service", () => {
       expect(mockNamespace.query).toHaveBeenCalledWith({
         vector: mockEmbedding,
         filter: mockFilter,
-        topK: 50,
+        topK: SEARCH_CONFIG.INITIAL_TOP_K,
         includeMetadata: true,
       });
       expect(result.pineconeFilter).toEqual(mockFilter);
@@ -193,7 +194,7 @@ describe("pinecone service", () => {
 
       expect(mockNamespace.query).toHaveBeenCalledWith(
         expect.objectContaining({
-          topK: 53, // 50 + 3
+          topK: SEARCH_CONFIG.INITIAL_TOP_K + 3,
         }),
       );
     });
@@ -214,7 +215,7 @@ describe("pinecone service", () => {
 
       expect(mockNamespace.query).toHaveBeenCalledWith(
         expect.objectContaining({
-          topK: 100, // Capped at 100
+          topK: SEARCH_CONFIG.MAX_TOP_K,
         }),
       );
     });
