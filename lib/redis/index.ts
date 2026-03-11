@@ -67,6 +67,9 @@ function createNoOpRedisClient(): IRedisClient {
     async zcard() {
       return 0;
     },
+    async expire() {
+      return false;
+    },
   };
 }
 
@@ -148,6 +151,10 @@ export async function trackQueryFrequency(cacheKey: string): Promise<void> {
   try {
     const frequencyKey = `${CACHE_PREFIXES.FREQUENCY}queries`;
     await redis.zincrby(frequencyKey, 1, cacheKey);
+
+    // Set TTL for entire Sorted Set to prevent infinite memory growth
+    // Resets every 30 days to clean up old queries
+    await redis.expire(frequencyKey, 30 * 24 * 60 * 60); // 30 days
   } catch (error) {
     console.warn(
       "⚠️ Query frequency tracking failed (Redis unavailable):",

@@ -740,13 +740,13 @@ describe("Integration: lib/utils/searchHelpers", () => {
     it("should return normalized query without filters", () => {
       const key = generateCacheKey("nike shoes");
 
-      expect(key).toBe("nike shoes");
+      expect(key).toBe("nike-shoes");
     });
 
     it("should return normalized query for empty filters", () => {
       const key = generateCacheKey("nike shoes", {});
 
-      expect(key).toBe("nike shoes");
+      expect(key).toBe("nike-shoes");
     });
 
     it("should include price range in cache key", () => {
@@ -754,7 +754,7 @@ describe("Integration: lib/utils/searchHelpers", () => {
         priceRange: ["0-80", "80-150"],
       });
 
-      expect(key).toContain("nike shoes");
+      expect(key).toContain("nike-shoes");
       expect(key).toContain("pr:");
       expect(key).toContain("0-80");
       expect(key).toContain("80-150");

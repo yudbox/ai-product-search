@@ -26,6 +26,7 @@ jest.mock("@/lib/redis", () => ({
     get: jest.fn(),
     set: jest.fn(),
     zscore: jest.fn(),
+    expire: jest.fn(),
   },
   CACHE_PREFIXES: {
     L1: "l1:",

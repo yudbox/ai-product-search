@@ -133,6 +133,19 @@ export class DockerRedisClient implements IRedisClient {
     }
   }
 
+  async expire(key: string, seconds: number): Promise<boolean> {
+    try {
+      const result = await this.client.expire(key, seconds);
+      return result === 1; // Redis returns 1 if TTL was set, 0 if key doesn't exist
+    } catch (error) {
+      console.warn(
+        `⚠️ Docker Redis EXPIRE failed for key "${key}":`,
+        error instanceof Error ? error.message : error,
+      );
+      return false; // Graceful degradation: return false on error
+    }
+  }
+
   async disconnect(): Promise<void> {
     try {
       await this.client.quit();

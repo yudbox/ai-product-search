@@ -532,9 +532,7 @@ describe("POST /api/search", () => {
       expect(callArgs.cached).toBe(true);
       expect(callArgs.products).toHaveLength(2);
       expect(callArgs.explanation).toBe("Cached results");
-      expect(callArgs.performance.parsing).toBe("0ms (cached)");
-      expect(callArgs.performance.embedding).toBe("0ms (cached)");
-      expect(callArgs.performance.search).toBe("0ms (cached)");
+      // Performance metrics removed from response
     });
 
     it("should proceed to full search on L1 hit but L2 miss", async () => {

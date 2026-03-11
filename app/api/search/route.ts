@@ -53,11 +53,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Query is required" }, { status: 400 });
     }
 
-    const startTotal = Date.now();
     logSearchRequest(query, filters);
 
     // L1 CACHE: Normalize query and check cache
-    const startCache = Date.now();
     const normalizedQuery = normalizeQueryL1(query);
     const l1CacheKey = generateCacheKey(normalizedQuery, filters);
 
@@ -80,7 +78,6 @@ export async function POST(req: Request) {
       if (l2CacheResult) {
         // L2 HIT: Return cached results
         logCacheHit("L2");
-        const cacheTime = Date.now() - startCache;
 
         return NextResponse.json({
           success: true,
@@ -95,13 +92,6 @@ export async function POST(req: Request) {
             true,
             true,
           ),
-          performance: {
-            parsing: "0ms (cached)",
-            embedding: "0ms (cached)",
-            search: "0ms (cached)",
-            cache: `${cacheTime}ms`,
-            total: `${Date.now() - startTotal}ms`,
-          },
         } satisfies SearchResponse);
       }
 
@@ -111,9 +101,7 @@ export async function POST(req: Request) {
     }
 
     // FULL SEARCH: Parse with LLM
-    const startParsing = Date.now();
     parsedQuery = await parseQueryWithLLM(query);
-    const parsingTime = Date.now() - startParsing;
     semanticQuery = parsedQuery.semanticQuery;
 
     logParsedQuery(parsedQuery);
@@ -135,29 +123,19 @@ export async function POST(req: Request) {
         products: [],
         explanation: helpMessage,
         suggestedQuery: parsedQuery.suggestedQuery,
-        performance: {
-          parsing: `${parsingTime}ms`,
-          embedding: "0ms",
-          search: "0ms",
-          total: `${Date.now() - startTotal}ms`,
-        },
       });
     }
 
     // Generate embedding
-    const startEmbedding = Date.now();
     const queryEmbedding = await generateEmbedding(parsedQuery.semanticQuery);
-    const embeddingTime = Date.now() - startEmbedding;
 
     // Search Pinecone
-    const startSearch = Date.now();
     const { searchResults, pineconeFilter } = await searchPinecone(
       queryEmbedding,
       parsedQuery,
       filters,
       excludedIds,
     );
-    const searchTime = Date.now() - startSearch;
 
     logPineconeFilter(pineconeFilter ?? null);
     logSearchResults(searchResults.matches);
@@ -167,8 +145,6 @@ export async function POST(req: Request) {
 
     // Generate AI explanation
     const explanation = generateExplanation(query, products, parsedQuery);
-
-    const totalTime = Date.now() - startTotal;
 
     // Save to cache
     try {
@@ -205,12 +181,6 @@ export async function POST(req: Request) {
         ),
         suggestedQuery:
           products.length === 0 ? parsedQuery?.suggestedQuery : undefined,
-        performance: {
-          parsing: `${parsingTime}ms`,
-          embedding: `${embeddingTime}ms`,
-          search: `${searchTime}ms`,
-          total: `${totalTime}ms`,
-        },
       } satisfies SearchResponse);
     } catch (cacheError) {
       logCacheError(cacheError);
@@ -231,12 +201,6 @@ export async function POST(req: Request) {
         ),
         suggestedQuery:
           products.length === 0 ? parsedQuery?.suggestedQuery : undefined,
-        performance: {
-          parsing: `${parsingTime}ms`,
-          embedding: `${embeddingTime}ms`,
-          search: `${searchTime}ms`,
-          total: `${totalTime}ms`,
-        },
       } satisfies SearchResponse);
     }
   } catch (error: unknown) {

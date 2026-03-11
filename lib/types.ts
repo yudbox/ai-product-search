@@ -55,7 +55,7 @@ export interface SearchResponse {
   performance?: {
     embedding: string;
     search: string;
-    total: string;
+    total?: string;
     parsing?: string;
     cache?: string;
   };
