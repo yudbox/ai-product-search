@@ -99,4 +99,17 @@ export class VercelKvClient implements IRedisClient {
       return 0; // Graceful degradation: return 0 on error
     }
   }
+
+  async expire(key: string, seconds: number): Promise<boolean> {
+    try {
+      const result = await kv.expire(key, seconds);
+      return result === 1; // Redis returns 1 if TTL was set, 0 if key doesn't exist
+    } catch (error) {
+      console.warn(
+        `⚠️ Vercel KV EXPIRE failed for key "${key}":`,
+        error instanceof Error ? error.message : error,
+      );
+      return false; // Graceful degradation: return false on error
+    }
+  }
 }

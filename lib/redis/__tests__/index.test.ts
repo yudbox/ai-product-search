@@ -9,6 +9,7 @@ jest.mock("../dockerRedisClient", () => ({
     set: jest.fn(),
     zscore: jest.fn(),
     zincrby: jest.fn(),
+    expire: jest.fn(),
   })),
 }));
 
@@ -18,6 +19,7 @@ jest.mock("../vercelKvClient", () => ({
     set: jest.fn(),
     zscore: jest.fn(),
     zincrby: jest.fn(),
+    expire: jest.fn(),
   })),
 }));
 

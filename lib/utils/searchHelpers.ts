@@ -6,15 +6,30 @@
 import type { SearchRequest, Product, ParsedQuery } from "@/lib/types";
 
 /**
+ * Regex pattern to match one or more whitespace characters
+ * Used for normalizing cache keys by replacing spaces with hyphens
+ */
+const WHITESPACE_REGEX = /\s+/g;
+
+/**
  * Generate cache key including UI filters for proper cache isolation
  * Different filter combinations should have different cache keys
+ * 
+ * Normalization rules:
+ * - Lowercase for consistency
+ * - Hyphens instead of spaces for Redis key best practices
+ * - Prevents duplicate keys (e.g., "Nike" vs "nike")
  */
 export function generateCacheKey(
   normalizedQuery: string,
   filters?: SearchRequest["filters"],
 ): string {
+  // Final normalization: lowercase + hyphens for Redis keys
+  // This ensures L1 and L2 keys follow the same format
+  const baseKey = normalizedQuery.toLowerCase().replace(WHITESPACE_REGEX, '-');
+  
   if (!filters || Object.keys(filters).length === 0) {
-    return normalizedQuery;
+    return baseKey;
   }
 
   // Sort and stringify filters for consistent cache keys
@@ -33,8 +48,8 @@ export function generateCacheKey(
   }
 
   return filterParts.length > 0
-    ? `${normalizedQuery}|${filterParts.join("|")}`
-    : normalizedQuery;
+    ? `${baseKey}|${filterParts.join("|")}`
+    : baseKey;
 }
 
 /**

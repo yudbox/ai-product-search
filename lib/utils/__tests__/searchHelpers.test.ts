@@ -14,12 +14,12 @@ describe("searchHelpers", () => {
   describe("generateCacheKey", () => {
     it("should return normalized query when no filters", () => {
       const result = generateCacheKey("running shoes");
-      expect(result).toBe("running shoes");
+      expect(result).toBe("running-shoes");
     });
 
     it("should return normalized query when filters are empty", () => {
       const result = generateCacheKey("running shoes", {});
-      expect(result).toBe("running shoes");
+      expect(result).toBe("running-shoes");
     });
 
     it("should include price range filter", () => {
@@ -50,7 +50,7 @@ describe("searchHelpers", () => {
         categories: ["sneakers"],
       });
       expect(result).toBe(
-        "running shoes|pr:80-150|br:Adidas,Nike|cat:sneakers",
+        "running-shoes|pr:80-150|br:Adidas,Nike|cat:sneakers",
       );
     });
 

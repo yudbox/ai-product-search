@@ -43,4 +43,9 @@ export interface IRedisClient {
    * ZCARD command - get number of members in sorted set
    */
   zcard(key: string): Promise<number>;
+
+  /**
+   * EXPIRE command - set TTL for key (in seconds)
+   */
+  expire(key: string, seconds: number): Promise<boolean>;
 }
